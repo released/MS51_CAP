@@ -524,7 +524,7 @@ void main (void)
 	//TimerService  : 200us , 1ms , 5ms , 10ms
 	TIMER0_Init();	// us base
 
-	//(P1.2 , PWM0_CH0) : ShaftSpeed , input capture , Max input freq 2K
+	//(P1.2 , PWM0_CH0 , IC0) , input capture 
 	CAP_Init();
 		
     while(1)
