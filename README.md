@@ -8,7 +8,11 @@ update @ 2021/06/28
 
 	- with origrinal setting (TIMER2 = sys clock , 24MHz) , will cause over flow if freq too slow
 
-	- change TIMER 2 clock div to 64 , and clear TIMER2 flag with TIMER2 interrupt 
+	- change TIMER 2 clock div to 64 , and clear TIMER2 flag with TIMER2 interrupt (optional)
+	
+	- add define (ENABLE_CAP_IRQ , ENABLE_CAP_POLLING) , to enable CAP function by interrupt or polling
+	
+		- need to set captur function to high priority , with timer interrupt enable
 	
 	- move width variable from local to global
 	

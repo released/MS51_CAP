@@ -1,5 +1,0 @@
-".\Output\main.obj",
-".\Output\STARTUP.obj" 
-TO ".\Output\Project" 
-PRINT(".\LST\Project.m51") RAMSIZE(256) 
-DISABLEWARNING (16) 

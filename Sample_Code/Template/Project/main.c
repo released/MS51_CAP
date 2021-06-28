@@ -1,47 +1,23 @@
-/*---------------------------------------------------------------------------------------------------------*/
-/*                                                                                                         */
-/* Copyright(c) 2019 Nuvoton Technology Corp. All rights reserved.                                         */
-/*                                                                                                         */
-/*---------------------------------------------------------------------------------------------------------*/
-
-/***********************************************************************************************************/
-/* Website: http://www.nuvoton.com                                                                         */
-/*  E-Mail : MicroC-8bit@nuvoton.com                                                                       */
-/*  Date   : Jan/21/2019                                                                                   */
-/***********************************************************************************************************/
-
-/************************************************************************************************************/
-/*  File Function: MS51 DEMO project                                                                        */
-/************************************************************************************************************/
 
 #include "MS51_16K.h"
-
-
-/*_____ M A C R O S ________________________________________________________*/
-
-#define ABS(X)  									((X) > 0 ? (X) : -(X)) 
-
-#define MAKE12BIT(v1,v2)         				((((uint16_t)(v1))<<4)+(uint16_t)(v2))      //v1,v2 is uint8_t
-
-#define _debug_log_CAPTURE_						(1)
+#include	"project_config.h"
 
 /*_____ D E F I N I T I O N S ______________________________________________*/
 #define SYS_CLOCK 								(24000000ul)
 #define TIMER2_CLOCK 							(24000000ul >> 6)
 
-#define PWM_FREQ 								(1000ul)
+#define PWM_FREQ 								(10ul)
 
 #define DUTY_RESOLUTION							(10000ul)
 #define DUTY_MAX								(DUTY_RESOLUTION)
 #define DUTY_MIN								(1ul)
 
+#define ENABLE_CAP_IRQ
+//#define ENABLE_CAP_POLLING
+
 /*_____ D E C L A R A T I O N S ____________________________________________*/
 volatile uint8_t u8TH0_Tmp = 0;
 volatile uint8_t u8TL0_Tmp = 0;
-
-uint16_t width0 = 0;
-uint16_t width1 = 0;
-uint16_t widthTotal = 0;
 
 //UART 0
 bit BIT_TMP;
@@ -49,30 +25,35 @@ bit BIT_UART;
 bit uart0_receive_flag=0;
 unsigned char uart0_receive_data;
 
+volatile uint32_t duty = 0;
+volatile uint16_t freq = 0;
+volatile uint16_t width0 = 0;
+volatile uint16_t width1 = 0;
+volatile uint16_t widthTotal = 0;
 
-typedef enum{
-	flag_START = 0 ,
-
-
-	flag_200us ,
-	flag_1ms ,
-	flag_5ms ,
-	flag_10ms ,	
-	flag_DEFAULT	
-}Flag_Index;
-
+/*_____ D E F I N I T I O N S ______________________________________________*/
 volatile uint32_t BitFlag = 0;
-#define BitFlag_ON(flag)							(BitFlag|=flag)
-#define BitFlag_OFF(flag)							(BitFlag&=~flag)
-#define BitFlag_READ(flag)							((BitFlag&flag)?1:0)
-#define ReadBit(bit)								(uint32_t)(1<<bit)
+volatile uint16_t counter_tick = 0;
 
-#define is_flag_set(idx)							(BitFlag_READ(ReadBit(idx)))
-#define set_flag(idx,en)							( (en == 1) ? (BitFlag_ON(ReadBit(idx))) : (BitFlag_OFF(ReadBit(idx))))
-
+/*_____ M A C R O S ________________________________________________________*/
 
 
 /*_____ F U N C T I O N S __________________________________________________*/
+
+void tick_counter(void)
+{
+	counter_tick++;
+}
+
+uint16_t get_tick(void)
+{
+	return (counter_tick);
+}
+
+void set_tick(uint32_t t)
+{
+	counter_tick = t;
+}
 
 void send_UARTString(uint8_t* Data)
 {
@@ -131,44 +112,9 @@ void send_UARTASCII(uint16_t Temp)
     send_UARTString(print_buf + i);
 }
 
-
-void capture_application (void)
-{
-	uint32_t duty = 0;
-	uint16_t freq = 0;	
-	
-	if((CAPCON0 & SET_BIT0) != 0)
-	{
-		#if 1
-		width0 = (C0H << 8 ) | C0L;
-		#else
-		width0 = C0H;
-		width0 <<= 8;
-		width0 |= C0L;
-		#endif
-	}
-
-	if((CAPCON0 & SET_BIT1) != 0)
-	{
-		#if 1
-		width1 = (C1H << 8 ) | C1L;
-		#else
-		width1 = C1H;
-		width1 <<= 8;
-		width1 |= C1L;	
-		#endif
-	}
-
-    clr_CAPCON0_CAPF0; 	
-    clr_CAPCON0_CAPF1; 	
-
-	widthTotal = width0 + width1;
-	freq = (float) (TIMER2_CLOCK)/(widthTotal);
-	
-//	duty = ((unsigned int)DUTY_RESOLUTION*(((float)width1) / widthTotal));  
-	duty = ((unsigned int)DUTY_RESOLUTION*((float)width1 / widthTotal));
-	
-	#if (_debug_log_CAPTURE_ == 1)	// when width0 = 0 , calculate will fail
+void capture_log (void)
+{	
+	#if (_debug_log_UART_ == 1)	// when width0 = 0 , calculate will fail
 //	if ((ABS((timer2_clk/freq)-widthTotal)<5) && ((width0 != 0) && (width1 != 0) ) )
 	{
 		send_UARTString("capture_application :");	
@@ -189,10 +135,55 @@ void capture_application (void)
 		send_UARTString("\r\n");
 
 	}
-
-
 	#endif		
 }
+
+void capture_application (void)
+{	
+	if((CAPCON0 & SET_BIT0) != 0)
+	{
+		#if 1
+		width0 = MAKEWORD(C0H,C0L);
+		#else
+		width0 = C0H;
+		width0 <<= 8;
+		width0 |= C0L;
+		#endif
+		clr_CAPCON0_CAPF0; 
+	}
+
+	if((CAPCON0 & SET_BIT1) != 0)
+	{
+		#if 1
+		width1 = MAKEWORD(C1H,C1L);
+		#else
+		width1 = C1H;
+		width1 <<= 8;
+		width1 |= C1L;	
+		#endif
+		clr_CAPCON0_CAPF1;
+	}
+
+	widthTotal = width0 + width1;
+	freq = (float) (TIMER2_CLOCK)/(widthTotal);
+	
+//	duty = ((unsigned int)DUTY_RESOLUTION*(((float)width1) / widthTotal));  
+	duty = ((unsigned int)DUTY_RESOLUTION*((float)width1 / widthTotal));
+
+	set_flag(flag_cap_ready , Enable);
+	
+}
+
+#if defined (ENABLE_CAP_IRQ)
+void Capture_ISR(void) interrupt 12
+{
+    _push_(SFRS);
+
+    capture_application();
+
+    _pop_(SFRS);
+}
+#endif
 
 void Timer2_ISR (void) interrupt 5
 {
@@ -217,11 +208,18 @@ void CAP_Init(void)
 	IC0_P12_CAP0_RISINGEDGE_CAPTRUE;
 	IC0_P12_CAP1_FALLINGEDGE_CAPTURE;
 
-//    set_EIE_ECAP;	
+	#if defined (ENABLE_CAP_IRQ)
+	clr_EIPH_PCAPH;
+	set_EIP_PCAP;
+	
+    ENABLE_CAPTURE_INTERRUPT;	//set_EIE_ECAP;
+    #endif
+	
+	clr_T2CON_TF2;
     set_T2CON_TR2;
 	ENABLE_TIMER2_INTERRUPT;
 
-//    ENABLE_GLOBAL_INTERRUPT;	
+    ENABLE_GLOBAL_INTERRUPT;	
 }
 
 //(P1.5 , PWM0_CH5) : SHAFT_DRIVER ,  motor PWM control output , 16k freq , duty 50 %
@@ -261,7 +259,7 @@ void PWM0_CHx_Init(uint16_t uFrequency,uint16_t d)	// ex : duty 83.5% , d = 8350
 void GPIO_Init(void)
 {
 	P17_QUASI_MODE;		
-	P30_PUSHPULL_MODE;	
+	P05_PUSHPULL_MODE;	
 }
 
 void task_10ms(void)
@@ -272,14 +270,18 @@ void task_10ms(void)
 		set_flag(flag_10ms,Disable);
 		
 		//application
-		P30 = ~P30;
+//		P30 = ~P30;
 
-//		PWM0_CHx_Init(PWM_FREQ , 850);		//8.5 %
-		PWM0_CHx_Init(PWM_FREQ , 7510);		//75.1 %		
-		
-		capture_application();
-		
-	
+		#if defined (ENABLE_CAP_POLLING)
+		capture_application();	
+		#endif
+
+
+		if (is_flag_set(flag_cap_ready))
+		{
+			capture_log();
+		}
+
 	}
 }
 
@@ -334,6 +336,7 @@ void task_loop(void)
 	task_10ms();
 
 
+
 }
 
 void Timer0_IRQHandler(void)
@@ -348,33 +351,29 @@ void Timer0_IRQHandler(void)
 	*/
 
 	const uint16_t div_1ms = 5;	
-	static uint16_t cnt_1ms = 0;
-
 	const uint16_t div_5ms = 25;	
-	static uint16_t cnt_5ms = 0;	
-	
 	const uint16_t div_10ms = 50;		//accurate 42 , with ADC conv.
-	static uint16_t cnt_10ms = 0;
 
+	tick_counter();
+	
 	set_flag(flag_200us,Enable);
 
-	if (++cnt_1ms >= div_1ms)	
+	if ((get_tick() % div_1ms) == 0)
 	{
 		set_flag(flag_1ms,Enable);	
-		cnt_1ms = 0;	
-	}
-	
-	if (++cnt_5ms >= div_5ms)	
-	{
-		set_flag(flag_5ms,Enable);
-		cnt_5ms = 0;	
 	}
 
-	if (++cnt_10ms >= div_10ms)
+	if ((get_tick() % div_5ms) == 0)
 	{
+		set_flag(flag_5ms,Enable);
+	}		
+
+	if ((get_tick() % div_10ms) == 0)
+	{
+		P05 = ~P05;		
 		set_flag(flag_10ms,Enable);
-		cnt_10ms = 0;		
-	}
+	}		
+
 	
 }
 
@@ -543,6 +542,9 @@ void main (void)
 
 	//TimerService  : 200us , 1ms , 5ms , 10ms
 	TIMER0_Init();	// us base
+
+//	PWM0_CHx_Init(PWM_FREQ , 850);		//8.5 %
+	PWM0_CHx_Init(PWM_FREQ , 7510);		//75.1 %	
 
 	//(P1.2 , PWM0_CH0 , IC0) , input capture 
 	CAP_Init();
