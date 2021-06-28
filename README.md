@@ -1,6 +1,41 @@
 # MS51_CAP
  MS51_CAP
 
+
+update @ 2021/06/28
+
+1. modify to support low speed freq (ex 10Hz ~ 1000Hz)
+
+	- with origrinal setting (TIMER2 = sys clock , 24MHz) , will cause over flow if freq too slow
+
+	- change TIMER 2 clock div to 64 , and clear TIMER2 flag with TIMER2 interrupt 
+	
+	- move width variable from local to global
+	
+	- set TIMER 2 clock with define
+
+	- chage PWM clock div 64 , to support out PWM freq to 10Hz , for test
+
+frequency calculation
+
+![image](https://github.com/released/MS51_CAP/blob/main/freq_calculation.jpg)
+
+
+
+below is test capture screen
+
+10Hz
+
+![image](https://github.com/released/MS51_CAP/blob/main/capture03_10Hz.jpg)
+
+
+1000Hz
+
+![image](https://github.com/released/MS51_CAP/blob/main/capture04_1000Hz.jpg)
+
+
+====================================
+
 1. Initial Input capture pin P1.2 (PWM0_CH0 , IC0) , to meausre input signal frequency and duty
 
 2. under IC0 , use CAP0 to measure input signal RISINGEDGE , use CAP1 to measure input signal FALLINGEDGE 

@@ -27,8 +27,9 @@
 
 /*_____ D E F I N I T I O N S ______________________________________________*/
 #define SYS_CLOCK 								(24000000ul)
+#define TIMER2_CLOCK 							(24000000ul >> 6)
 
-#define PWM_FREQ 								(16000ul)
+#define PWM_FREQ 								(1000ul)
 
 #define DUTY_RESOLUTION							(10000ul)
 #define DUTY_MAX								(DUTY_RESOLUTION)
@@ -37,6 +38,10 @@
 /*_____ D E C L A R A T I O N S ____________________________________________*/
 volatile uint8_t u8TH0_Tmp = 0;
 volatile uint8_t u8TL0_Tmp = 0;
+
+uint16_t width0 = 0;
+uint16_t width1 = 0;
+uint16_t widthTotal = 0;
 
 //UART 0
 bit BIT_TMP;
@@ -131,36 +136,40 @@ void capture_application (void)
 {
 	uint32_t duty = 0;
 	uint16_t freq = 0;	
-	uint16_t width0 = 0;
-	uint16_t width1 = 0;
-	uint16_t widthTotal = 0;	
 	
 	if((CAPCON0 & SET_BIT0) != 0)
 	{
+		#if 1
+		width0 = (C0H << 8 ) | C0L;
+		#else
 		width0 = C0H;
 		width0 <<= 8;
 		width0 |= C0L;
+		#endif
 	}
 
 	if((CAPCON0 & SET_BIT1) != 0)
 	{
+		#if 1
+		width1 = (C1H << 8 ) | C1L;
+		#else
 		width1 = C1H;
 		width1 <<= 8;
 		width1 |= C1L;	
+		#endif
 	}
 
     clr_CAPCON0_CAPF0; 	
     clr_CAPCON0_CAPF1; 	
-    clr_T2CON_TF2;
 
 	widthTotal = width0 + width1;
-	freq = (SYS_CLOCK)/(widthTotal);
+	freq = (float) (TIMER2_CLOCK)/(widthTotal);
 	
 //	duty = ((unsigned int)DUTY_RESOLUTION*(((float)width1) / widthTotal));  
 	duty = ((unsigned int)DUTY_RESOLUTION*((float)width1 / widthTotal));
 	
 	#if (_debug_log_CAPTURE_ == 1)	// when width0 = 0 , calculate will fail
-	if ((ABS((SYS_CLOCK/freq)-widthTotal)<5) && ((width0 != 0) && (width1 != 0) ) )
+//	if ((ABS((timer2_clk/freq)-widthTotal)<5) && ((width0 != 0) && (width1 != 0) ) )
 	{
 		send_UARTString("capture_application :");	
 		send_UARTString(",freq:");
@@ -175,7 +184,7 @@ void capture_application (void)
 		send_UARTString(",widthTotal:");
 		send_UARTASCII(widthTotal);		
 		send_UARTString(",temp:");
-		send_UARTASCII(SYS_CLOCK/freq);	
+		send_UARTASCII(TIMER2_CLOCK/freq);	
 		
 		send_UARTString("\r\n");
 
@@ -185,6 +194,14 @@ void capture_application (void)
 	#endif		
 }
 
+void Timer2_ISR (void) interrupt 5
+{
+    _push_(SFRS);
+
+    clr_T2CON_TF2;	
+
+    _pop_(SFRS);
+}
 
 //P1.2 , PWM0_CH0 , IC0 
 void CAP_Init(void)
@@ -195,11 +212,14 @@ void CAP_Init(void)
     TIMER2_CAP0_Capture_Mode;
 	TIMER2_CAP1_Capture_Mode;
 
+	TIMER2_DIV_64;
+
 	IC0_P12_CAP0_RISINGEDGE_CAPTRUE;
 	IC0_P12_CAP1_FALLINGEDGE_CAPTURE;
 
 //    set_EIE_ECAP;	
     set_T2CON_TR2;
+	ENABLE_TIMER2_INTERRUPT;
 
 //    ENABLE_GLOBAL_INTERRUPT;	
 }
@@ -213,12 +233,12 @@ void PWM0_CHx_Init(uint16_t uFrequency,uint16_t d)	// ex : duty 83.5% , d = 8350
     PWM5_P15_OUTPUT_ENABLE;	
  
     PWM_IMDEPENDENT_MODE;
-    PWM_CLOCK_DIV_2;
+    PWM_CLOCK_DIV_64;
 
 /*
 	PWM frequency   = Fpwm/((PWMPH,PWMPL)+1) = (24MHz/2)/(PWMPH,PWMPL)+1) = 20KHz
 */	
-	res = (SYS_CLOCK>>1);
+	res = (SYS_CLOCK>>6);
 	res = res/uFrequency;		//value 375 for 16K
 	res = res - 1;
 	
